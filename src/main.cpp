@@ -2,7 +2,9 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <cmath>
 #include <vector>
+#include <algorithm>
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
@@ -116,6 +118,10 @@ int main()
             car_s = end_path_s;
           }
 
+          // Lane change default not possible
+          bool LeftLaneChange = true;
+          bool RightLaneChange = true;
+
           // Iterate through the given list of cars
           for (int i = 0; i < sensor_fusion.size(); i++)
           {
@@ -127,9 +133,46 @@ int main()
             double o_car_s = sensor_fusion[i][5];
             double o_car_d = sensor_fusion[i][6];
 
+            int lane_d = 2 - (lane); //transform lane into space orientation
+
+            // Is left lane change possible?
+            int left_lane = lane_d + 1;
+            if (left_lane <= 2)
+            {
+              std::cout << "abs -left:" << std::abs(o_car_s - car_s) << std::endl;
+              // Is car in range of 20 m of ego_car and in the left lane
+              if ((std::abs(o_car_s - car_s) < 25) && o_car_d < (left_lane + 1) * lane_width && o_car_d > left_lane * lane_width)
+              {
+                std::cout << "LeftLaneChange not possible:" << o_car_d << std::endl;
+                LeftLaneChange = false;
+              }
+            }
+            else // lane doesn't exist
+            {
+              LeftLaneChange = false;
+            }
+
+            // Is right lane change possible?
+            int right_lane = lane_d - 1;
+
+            if (right_lane >= 0)
+            {
+              std::cout << "abs -right:" << std::abs(o_car_s - car_s) << std::endl;
+
+              // Is car in range of 20 m of ego_car and in the right lane
+              if ((std::abs(o_car_s - car_s) < 25) && (o_car_d < right_lane * lane_width) && (o_car_d > (right_lane + 1) * lane_width))
+              {
+                std::cout << "RightLaneChange not possible:" << o_car_d << std::endl;
+                RightLaneChange = false;
+              }
+            }
+            else // lane doesn't exist
+            {
+              RightLaneChange = false;
+            }
+
             PID pidObj;
-            pidObj.Init(.02,0.8,0.001,0.5);
-            // pidObj.Init(.02,1,0.001,0.3);
+            pidObj.Init(.02, 0.8, 0.001, 0.5);
 
             // Is the o_car in our lane
             if ((o_car_d < (lane_width * lane + lane_width) && o_car_d > (lane_width * lane)))
@@ -146,25 +189,23 @@ int main()
                 std::cout << "distance to target:" << to_target_dist << std::endl;
                 std::cout << "calculated error:" << pidObj.TotalError() << std::endl;
                 std::cout << "velocity:" << ref_vel + pidObj.TotalError() << std::endl;
+                std::cout << "LeftLaneChange:" << LeftLaneChange << std::endl;
+                std::cout << "RightLaneChange:" << RightLaneChange << std::endl;
+                std::cout << "o_car_d:" << o_car_d << std::endl;
 
                 if ((to_target_dist < 30) || pidActive)
                 {
-                  // While the car is slowly down
+                  // While the car is slowling down...
                   o_car_id = i;
                   pidActive = true;
                   ref_vel = ref_vel + pidObj.TotalError();
-                  
-
-                  // Also try to change lanes
-                  
-                  // Which lane is possible lane+1/-1
-
-                  // Has the lane vehicles in the range abs(o_car-ego_car)<5
-
-                  // Check if a car is in 
-                  
-                  // lane=0;
                 }
+                // ...check whether a lane change is possible
+                if (LeftLaneChange)
+                  lane -= 1;
+
+                if (RightLaneChange && !LeftLaneChange) //otherwise lane will be same
+                  lane += 1;
               }
               // o_car is just out of range -> reset
               else if (o_car_id == i)

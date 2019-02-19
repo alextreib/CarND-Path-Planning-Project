@@ -8,6 +8,7 @@
 #include "helpers.h"
 #include "json.hpp"
 #include "spline.h"
+#include "PID.h"
 
 // for convenience
 using nlohmann::json;
@@ -53,13 +54,20 @@ int main()
     map_waypoints_dy.push_back(d_y);
   }
 
-  //staring lane with 0 is left, middle is 1 und right is 2
-  const int lane = 1;
+  // Staring lane with 0 is left, middle is 1 und right is lane with 0 is left, middle is 1 und right is 2
+  int lane = 1;
+  // Maximal velocity
+  double ref_vel = 48;
+  // Width of lane
+  const int lane_width = 4;
+  // Through sample frequency -> 20 ms per sample
+  const double sample_duration = 0.02;
 
-  // maximal velocity
-  const int ref_vel = 48;
+  bool pidActive = false;
+  int o_car_id = 0;
+  std::cout << "pid init<:" << std::endl;
 
-  h.onMessage([&map_waypoints_x, &map_waypoints_y, &map_waypoints_s,
+  h.onMessage([&o_car_id, &pidActive, &sample_duration, &lane, &ref_vel, &map_waypoints_x, &map_waypoints_y, &map_waypoints_s,
                &map_waypoints_dx, &map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                                                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -102,6 +110,70 @@ int main()
 
           ///Coding starts///
           int prev_size = previous_path_x.size();
+
+          if (prev_size > 0)
+          {
+            car_s = end_path_s;
+          }
+
+          // Iterate through the given list of cars
+          for (int i = 0; i < sensor_fusion.size(); i++)
+          {
+            // std::cout << "new for loop<:"<< std::endl;
+            // o_car = other car | ego_car = ego vehicle
+            double o_car_vx = sensor_fusion[i][3];
+            double o_car_vy = sensor_fusion[i][4];
+            double o_car_v = sqrt(o_car_vx * o_car_vx + o_car_vy * o_car_vy);
+            double o_car_s = sensor_fusion[i][5];
+            double o_car_d = sensor_fusion[i][6];
+
+            PID pidObj;
+            pidObj.Init(.02,0.8,0.001,0.5);
+            // pidObj.Init(.02,1,0.001,0.3);
+
+            // Is the o_car in our lane
+            if ((o_car_d < (lane_width * lane + lane_width) && o_car_d > (lane_width * lane)))
+            {
+              // Predict o_car_s into the future (with prev_size)
+              o_car_s += ((double)prev_size * sample_duration * o_car_v);
+
+              // If car is in front and in certain distance (50m)
+              double to_target_dist = (o_car_s - car_s);
+              if ((o_car_s > car_s) && (to_target_dist < 50) && (to_target_dist > 0))
+              {
+                // Use PID to regulate to 30m
+                pidObj.Update(30, to_target_dist);
+                std::cout << "distance to target:" << to_target_dist << std::endl;
+                std::cout << "calculated error:" << pidObj.TotalError() << std::endl;
+                std::cout << "velocity:" << ref_vel + pidObj.TotalError() << std::endl;
+
+                if ((to_target_dist < 30) || pidActive)
+                {
+                  // While the car is slowly down
+                  o_car_id = i;
+                  pidActive = true;
+                  ref_vel = ref_vel + pidObj.TotalError();
+                  
+
+                  // Also try to change lanes
+                  
+                  // Which lane is possible lane+1/-1
+
+                  // Has the lane vehicles in the range abs(o_car-ego_car)<5
+
+                  // Check if a car is in 
+                  
+                  // lane=0;
+                }
+              }
+              // o_car is just out of range -> reset
+              else if (o_car_id == i)
+              {
+                pidActive = false;
+                ref_vel = 48;
+              }
+            }
+          }
 
           // Code taken over from lesson and project Q&A
           // Create a list of widely spaced (x,y) waypoints, evenly spaced at 30m
@@ -192,13 +264,13 @@ int main()
           double target_x = 30.0;
           double target_y = s(target_x);
           double target_dist = sqrt((target_x) * (target_x) + (target_y) * (target_y));
-          
+
           double x_add_on = 0;
 
           // Fill up the rest of the path planner to always output 50 points
           for (int i = 1; i <= 50 - previous_path_x.size(); i++)
           {
-            double N = (target_dist / (.02 * ref_vel / 2.24));
+            double N = (target_dist / (0.02 * ref_vel / 2.24));
             double x_point = x_add_on + (target_x) / N;
             double y_point = s(x_point);
 

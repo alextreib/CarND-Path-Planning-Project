@@ -25,7 +25,6 @@ public:
   */
   double pre_error;
   double _dt;
-  bool isInit;
   /*
   * Constructor
   */
@@ -39,9 +38,8 @@ public:
   /*
   * Initialize PID.
   */
-  void Init(double dt, double Kp, double Ki=0.0, double Kd=0.0);
+  void Init(double dt, double Kp, double Ki = 0.0, double Kd = 0.0);
 
-bool isInitialized();
   /*
   * Update the PID error variables given cross track error.
   */
@@ -58,7 +56,6 @@ bool isInitialized();
   double D_Error();
 
   double TotalError();
-
 };
 
 #endif /* PID_H */

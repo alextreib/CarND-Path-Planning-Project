@@ -96,10 +96,13 @@ int main()
   // Through sample frequency -> 20 ms per sample
 
   bool pidActive = false;
+  PID pidObj;
+  pidObj.Init(.02, 6, 0, 0.05);
+
   int o_car_id = 0;
   std::cout << "pid init<:" << std::endl;
 
-  h.onMessage([&o_car_id, &pidActive, &sample_duration, &lane, &ref_vel, &map_waypoints_x, &map_waypoints_y, &map_waypoints_s,
+  h.onMessage([&pidObj, &o_car_id, &pidActive, &sample_duration, &lane, &ref_vel, &map_waypoints_x, &map_waypoints_y, &map_waypoints_s,
                &map_waypoints_dx, &map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                                                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -107,7 +110,6 @@ int main()
     // The 2 signifies a websocket event
     if (length && length > 2 && data[0] == '4' && data[1] == '2')
     {
-
       auto s = hasData(data);
 
       if (s != "")
@@ -137,7 +139,8 @@ int main()
 
           const double MAX_ACC = .224;
           const double MAX_SPEED = 49.5;
-
+          const int min_dist_lane_change = 25;
+          const int dist_predictive_lange_change=50;
           double calc_ref_vel = MAX_SPEED;
 
           // Sensor Fusion Data, a list of all other cars on the same side
@@ -156,6 +159,7 @@ int main()
           // Lane change default not possible
           bool LeftLaneChange = true;
           bool RightLaneChange = true;
+          double distance_to_o_car;
 
           // Iterate through the given list of cars
           for (int i = 0; i < sensor_fusion.size(); i++)
@@ -168,17 +172,18 @@ int main()
             double o_car_s = sensor_fusion[i][5];
             double o_car_d = sensor_fusion[i][6];
 
-            const int min_dist_lane_change = 30;
-            int lane_d = 2 - (lane); //transform lane into space orientation
+            // Predict o_car_s into the future (with prev_size)
+            o_car_s += ((double)prev_size * sample_duration * o_car_v);
 
+            distance_to_o_car = std::abs(o_car_s - car_s);
             // Is left lane change possible?
-            int left_lane = lane_d + 1;
-            if (left_lane <= 2)
+            int left_lane = lane - 1;
+            if (left_lane >= 0)
             {
               // Is car in range of 20 m of ego_car and in the left lane
-              if ((std::abs(o_car_s - car_s) < min_dist_lane_change) && o_car_d < (left_lane + 1) * lane_width && o_car_d > left_lane * lane_width)
+              if ((distance_to_o_car < min_dist_lane_change) && o_car_d < (left_lane + 1) * lane_width && o_car_d > left_lane * lane_width)
               {
-                std::cout << "LeftLaneChange not possible:" << o_car_d << std::endl;
+                std::cout << "LeftLaneChange not possible:" << distance_to_o_car << std::endl;
                 LeftLaneChange = false;
               }
             }
@@ -188,14 +193,14 @@ int main()
             }
 
             // Is right lane change possible?
-            int right_lane = lane_d - 1;
+            int right_lane = lane + 1;
 
-            if (right_lane >= 0)
+            if (right_lane <= 2)
             {
               // Is car in range of 20 m of ego_car and in the right lane
-              if ((std::abs(o_car_s - car_s) < min_dist_lane_change) && (o_car_d > right_lane * lane_width) && (o_car_d < (right_lane + 1) * lane_width))
+              if ((distance_to_o_car < min_dist_lane_change) && (o_car_d > right_lane * lane_width) && (o_car_d < (right_lane + 1) * lane_width))
               {
-                std::cout << "RightLaneChange not possible:" << o_car_d << std::endl;
+                std::cout << "RightLaneChange not possible:" << distance_to_o_car << std::endl;
                 RightLaneChange = false;
               }
             }
@@ -204,27 +209,15 @@ int main()
               RightLaneChange = false;
             }
 
-            PID pidObj;
-            pidObj.Init(.02, 6, 0, 0.05);
-
             // Is the o_car in our lane
             if ((o_car_d < (lane_width * lane + lane_width) && o_car_d > (lane_width * lane)))
             {
-              // Predict o_car_s into the future (with prev_size)
-              o_car_s += ((double)prev_size * sample_duration * o_car_v);
-
               // If car is in front and in certain distance (50m)
-              double to_target_dist = (o_car_s - car_s);
+              double to_target_dist = distance_to_o_car;
               if ((o_car_s > car_s) && (to_target_dist < 50) && (to_target_dist > 0))
               {
                 // Use PID to regulate to 30m
                 pidObj.Update(30, to_target_dist);
-                std::cout << "distance to target:" << to_target_dist << std::endl;
-                std::cout << "calculated error:" << pidObj.TotalError() << std::endl;
-                std::cout << "velocity:" << ref_vel + pidObj.TotalError() << std::endl;
-                std::cout << "LeftLaneChange:" << LeftLaneChange << std::endl;
-                std::cout << "RightLaneChange:" << RightLaneChange << std::endl;
-                std::cout << "o_car_d:" << o_car_d << std::endl;
 
                 if ((to_target_dist < 30) || pidActive)
                 {
@@ -233,12 +226,6 @@ int main()
                   pidActive = true;
                   calc_ref_vel = ref_vel + pidObj.TotalError();
                 }
-                // ...check whether a lane change is possible
-                if (LeftLaneChange)
-                  lane -= 1;
-
-                if (RightLaneChange && !LeftLaneChange) //otherwise lane will be same
-                  lane += 1;
               }
               // o_car is just out of range -> reset
               else if (o_car_id == i)
@@ -249,8 +236,17 @@ int main()
             }
           }
 
-          // How can the car react
+          //*********REACTION******************//
 
+          // Lane change
+          // ...check whether a lane change is possible
+          if (LeftLaneChange && (distance_to_o_car<dist_predictive_lange_change))
+            lane--;
+
+          if (RightLaneChange && !LeftLaneChange &&  (distance_to_o_car<dist_predictive_lange_change)) //otherwise lane will be same
+            lane++;
+
+          // How can the car react
           if (calc_ref_vel > ref_vel + MAX_ACC)
             calc_ref_vel = ref_vel + MAX_ACC;
           if (calc_ref_vel < ref_vel - MAX_ACC)

@@ -150,7 +150,7 @@ int main()
               // Is car in range of 20 m of ego_car and in the left lane
               if ((distance_to_o_car < dist_lane_change) && o_car_d < (left_lane + 1) * lane_width && o_car_d > left_lane * lane_width)
               {
-                std::cout << "LeftLaneChange not possible:" << distance_to_o_car << std::endl;
+                std::cout << "LeftLaneChange not possible, distance to car in lane:" << distance_to_o_car << std::endl;
                 LeftLaneChange = false;
               }
             }
@@ -167,7 +167,7 @@ int main()
               // Is car in range of 20 m of ego_car and in the right lane
               if ((distance_to_o_car < dist_lane_change) && (o_car_d > right_lane * lane_width) && (o_car_d < (right_lane + 1) * lane_width))
               {
-                std::cout << "RightLaneChange not possible:" << distance_to_o_car << std::endl;
+                std::cout << "RightLaneChange not possible, distance to car in lane:" << distance_to_o_car << std::endl;
                 RightLaneChange = false;
               }
             }

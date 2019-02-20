@@ -17,37 +17,6 @@ using nlohmann::json;
 using std::string;
 using std::vector;
 
-const double sample_duration = 0.02;
-
-float changeVel(float newVel, float previousVel)
-{
-  // boundaries
-  if (newVel > 49)
-    return 49;
-
-  // max acc
-  float maxAcc = 4;
-  double a = std::abs(previousVel - newVel) / (sample_duration);
-  if (a > maxAcc)
-  {
-    if (previousVel > newVel)
-    {
-      return previousVel - maxAcc * sample_duration;
-    }
-    if (previousVel < newVel)
-    {
-      return previousVel + maxAcc * sample_duration;
-    }
-  }
-  //Else
-  return previousVel;
-}
-
-float resetVel()
-{
-  return 47;
-}
-
 int main()
 {
   uWS::Hub h;
@@ -87,21 +56,20 @@ int main()
     map_waypoints_dy.push_back(d_y);
   }
 
-  // Staring lane with 0 is left, middle is 1 und right is lane with 0 is left, middle is 1 und right is 2
+  // Starting lane with 0 is left, middle is 1 und right is lane with 0 is left, middle is 1 und right is 2
   int lane = 1;
   // Maximal velocity
   double ref_vel = 0;
   // Width of lane
   const int lane_width = 4;
   // Through sample frequency -> 20 ms per sample
-
-  bool pidActive = false;
+  const double sample_duration = 0.02;
+  // PID object
   PID pidObj;
 
   int o_car_id = 0;
-  std::cout << "pid init<:" << std::endl;
 
-  h.onMessage([&pidObj, &o_car_id, &pidActive, &sample_duration, &lane, &ref_vel, &map_waypoints_x, &map_waypoints_y, &map_waypoints_s,
+  h.onMessage([&pidObj, &o_car_id, &sample_duration, &lane, &ref_vel, &map_waypoints_x, &map_waypoints_y, &map_waypoints_s,
                &map_waypoints_dx, &map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                                                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -138,9 +106,8 @@ int main()
 
           const double MAX_ACC = .224;
           const double MAX_SPEED = 49.5;
-          const int min_dist_lane_change = 30;
-          const int dist_predictive_lange_change = min_dist_lane_change ;
-          double calc_ref_vel = MAX_SPEED;
+          const int dist_lane_change = 30;
+          double calc__vel = MAX_SPEED;
 
           // Sensor Fusion Data, a list of all other cars on the same side
           //   of the road.
@@ -158,12 +125,12 @@ int main()
           // Lane change default not possible
           bool LeftLaneChange = true;
           bool RightLaneChange = true;
-          double dist_to_real_obj=0;
+          double dist_to_real_obj = 0;
 
           // Iterate through the given list of cars
+          //*********Analysis******************//
           for (int i = 0; i < sensor_fusion.size(); i++)
           {
-            // std::cout << "new for loop<:"<< std::endl;
             // o_car = other car | ego_car = ego vehicle
             double o_car_vx = sensor_fusion[i][3];
             double o_car_vy = sensor_fusion[i][4];
@@ -175,12 +142,13 @@ int main()
             o_car_s += ((double)prev_size * sample_duration * o_car_v);
 
             double distance_to_o_car = std::abs(o_car_s - car_s);
+
             // Is left lane change possible?
             int left_lane = lane - 1;
             if (left_lane >= 0)
             {
               // Is car in range of 20 m of ego_car and in the left lane
-              if ((distance_to_o_car < min_dist_lane_change) && o_car_d < (left_lane + 1) * lane_width && o_car_d > left_lane * lane_width)
+              if ((distance_to_o_car < dist_lane_change) && o_car_d < (left_lane + 1) * lane_width && o_car_d > left_lane * lane_width)
               {
                 std::cout << "LeftLaneChange not possible:" << distance_to_o_car << std::endl;
                 LeftLaneChange = false;
@@ -197,7 +165,7 @@ int main()
             if (right_lane <= 2)
             {
               // Is car in range of 20 m of ego_car and in the right lane
-              if ((distance_to_o_car < min_dist_lane_change) && (o_car_d > right_lane * lane_width) && (o_car_d < (right_lane + 1) * lane_width))
+              if ((distance_to_o_car < dist_lane_change) && (o_car_d > right_lane * lane_width) && (o_car_d < (right_lane + 1) * lane_width))
               {
                 std::cout << "RightLaneChange not possible:" << distance_to_o_car << std::endl;
                 RightLaneChange = false;
@@ -213,10 +181,9 @@ int main()
             {
               // If car is in front and in certain distance (50m)
               double to_target_dist = (o_car_s - car_s);
-
               if ((o_car_s > car_s) && (to_target_dist < 50) && (to_target_dist > 0))
               {
-                dist_to_real_obj=to_target_dist;
+                dist_to_real_obj = to_target_dist;
                 // Use PID to regulate to 30m
                 pidObj.Update(30, to_target_dist);
 
@@ -227,7 +194,7 @@ int main()
                 if (to_target_dist < 30)
                 {
                   o_car_id = i;
-                  calc_ref_vel = ref_vel + pidObj.TotalError();
+                  calc__vel = ref_vel + pidObj.TotalError();
                 }
               }
             }
@@ -237,29 +204,23 @@ int main()
 
           // Lane change
           // ...check whether a lane change is possible
-          std::cout << "LeftLaneChange:" << LeftLaneChange << std::endl;
-          std::cout << "RightLaneChange:" << RightLaneChange << std::endl;
-          std::cout << "dist_to_real_obj:" << dist_to_real_obj << std::endl;
-          std::cout << "dist_predictive_lange_change:" << dist_predictive_lange_change << std::endl;
-
-          if (LeftLaneChange && (dist_to_real_obj < dist_predictive_lange_change) && (dist_to_real_obj > 0))
+          if (LeftLaneChange && (dist_to_real_obj < dist_lane_change))
             lane--;
 
-          if (RightLaneChange && !LeftLaneChange && (dist_to_real_obj < dist_predictive_lange_change) && (dist_to_real_obj > 0)) //otherwise lane will be same
+          if (RightLaneChange && !LeftLaneChange && (dist_to_real_obj < dist_lane_change)) //otherwise lane will be same
             lane++;
-          std::cout << "lane:" << lane << std::endl;
 
           // How can the car react
-          if (calc_ref_vel > ref_vel + MAX_ACC)
-            calc_ref_vel = ref_vel + MAX_ACC;
-          if (calc_ref_vel < ref_vel - MAX_ACC)
-            calc_ref_vel = ref_vel - MAX_ACC;
+          if (calc__vel > ref_vel + MAX_ACC)
+            calc__vel = ref_vel + MAX_ACC;
+          if (calc__vel < ref_vel - MAX_ACC)
+            calc__vel = ref_vel - MAX_ACC;
 
-          if (calc_ref_vel > MAX_SPEED)
-            calc_ref_vel = MAX_SPEED;
+          if (calc__vel > MAX_SPEED)
+            calc__vel = MAX_SPEED;
 
-          // Finally
-          ref_vel = calc_ref_vel;
+          // Finally set the calculated velocity to the reference velocity
+          ref_vel = calc__vel;
 
           // Code taken over from lesson and project Q&A
           // Create a list of widely spaced (x,y) waypoints, evenly spaced at 30m

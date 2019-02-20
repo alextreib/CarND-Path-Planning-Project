@@ -127,8 +127,10 @@ int main()
           bool RightLaneChange = true;
           double dist_to_real_obj = 0;
 
+          
+          //*********Situation Analysis******************//
+
           // Iterate through the given list of cars
-          //*********Analysis******************//
           for (int i = 0; i < sensor_fusion.size(); i++)
           {
             // o_car = other car | ego_car = ego vehicle
@@ -200,7 +202,7 @@ int main()
             }
           }
 
-          //*********REACTION******************//
+          //*********Vehicle reaction pattern******************//
 
           // Lane change
           // ...check whether a lane change is possible

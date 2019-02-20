@@ -143,3 +143,51 @@ still be compilable with cmake and make./
 ## How to write a README
 A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
 
+
+Writeup
+---
+
+**Path Planning**
+
+---
+### Compilation
+
+#### 1. The code compiles correctly.
+Minor modification are done in the CMakeLists.txt to include the PID controller.
+
+### Valid Trajectories
+
+#### 1. The car is able to drive at least 4.32 miles without incident..
+
+Done. See this screenshot:
+![Overview over simulation](img/overview.JPG)
+
+The recording was stopped after over 5 miles without incident.
+
+#### 2. The car drives according to the speed limit.
+
+Through code, the vehicle motion is not able to drive above the speed limit.
+
+Even the PID controller cannot accelerate the vehicle so fast.
+
+#### 3. Max Acceleration and Jerk are not Exceeded.
+
+This is also ensured in the code in the code section 'Vehicle Reaction Pattern'.
+
+#### 4. Car does not have collisions.
+
+Through a tuned PID controller, the collisions are prevented at almost speed limit. 
+
+#### 5. The car stays in its lane, except for the time between changing lanes.
+
+Done. The trajectory is planned in the middle of the road.
+
+#### 6. The car is able to change lanes
+
+This is realized very effectively through algorithms in the 'Situation Analysis' part.
+
+After that, the variables LeftLaneChange and RightLaneChange are analyzed and the vehicle reacts accordingly.
+
+### Reflection
+
+#### 1. There is a reflection on how to generate paths.

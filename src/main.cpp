@@ -17,6 +17,37 @@ using nlohmann::json;
 using std::string;
 using std::vector;
 
+const double sample_duration = 0.02;
+
+float changeVel(float newVel, float previousVel)
+{
+  // boundaries
+  if (newVel > 49)
+    return 49;
+
+  // max acc
+  float maxAcc = 4;
+  double a = std::abs(previousVel - newVel) / (sample_duration);
+  if (a > maxAcc)
+  {
+    if (previousVel > newVel)
+    {
+      return previousVel - maxAcc * sample_duration;
+    }
+    if (previousVel < newVel)
+    {
+      return previousVel + maxAcc * sample_duration;
+    }
+  }
+  //Else
+  return previousVel;
+}
+
+float resetVel()
+{
+  return 47;
+}
+
 int main()
 {
   uWS::Hub h;
@@ -59,11 +90,10 @@ int main()
   // Staring lane with 0 is left, middle is 1 und right is lane with 0 is left, middle is 1 und right is 2
   int lane = 1;
   // Maximal velocity
-  double ref_vel = 48;
+  double ref_vel = 0;
   // Width of lane
   const int lane_width = 4;
   // Through sample frequency -> 20 ms per sample
-  const double sample_duration = 0.02;
 
   bool pidActive = false;
   int o_car_id = 0;
@@ -105,6 +135,11 @@ int main()
           double end_path_s = j[1]["end_path_s"];
           double end_path_d = j[1]["end_path_d"];
 
+          const double MAX_ACC = .224;
+          const double MAX_SPEED = 49.5;
+
+          double calc_ref_vel = MAX_SPEED;
+
           // Sensor Fusion Data, a list of all other cars on the same side
           //   of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
@@ -133,15 +168,15 @@ int main()
             double o_car_s = sensor_fusion[i][5];
             double o_car_d = sensor_fusion[i][6];
 
+            const int min_dist_lane_change = 30;
             int lane_d = 2 - (lane); //transform lane into space orientation
 
             // Is left lane change possible?
             int left_lane = lane_d + 1;
             if (left_lane <= 2)
             {
-              std::cout << "abs -left:" << std::abs(o_car_s - car_s) << std::endl;
               // Is car in range of 20 m of ego_car and in the left lane
-              if ((std::abs(o_car_s - car_s) < 25) && o_car_d < (left_lane + 1) * lane_width && o_car_d > left_lane * lane_width)
+              if ((std::abs(o_car_s - car_s) < min_dist_lane_change) && o_car_d < (left_lane + 1) * lane_width && o_car_d > left_lane * lane_width)
               {
                 std::cout << "LeftLaneChange not possible:" << o_car_d << std::endl;
                 LeftLaneChange = false;
@@ -157,10 +192,8 @@ int main()
 
             if (right_lane >= 0)
             {
-              std::cout << "abs -right:" << std::abs(o_car_s - car_s) << std::endl;
-
               // Is car in range of 20 m of ego_car and in the right lane
-              if ((std::abs(o_car_s - car_s) < 25) && (o_car_d < right_lane * lane_width) && (o_car_d > (right_lane + 1) * lane_width))
+              if ((std::abs(o_car_s - car_s) < min_dist_lane_change) && (o_car_d > right_lane * lane_width) && (o_car_d < (right_lane + 1) * lane_width))
               {
                 std::cout << "RightLaneChange not possible:" << o_car_d << std::endl;
                 RightLaneChange = false;
@@ -172,7 +205,7 @@ int main()
             }
 
             PID pidObj;
-            pidObj.Init(.02, 0.8, 0.001, 0.5);
+            pidObj.Init(.02, 6, 0, 0.05);
 
             // Is the o_car in our lane
             if ((o_car_d < (lane_width * lane + lane_width) && o_car_d > (lane_width * lane)))
@@ -198,7 +231,7 @@ int main()
                   // While the car is slowling down...
                   o_car_id = i;
                   pidActive = true;
-                  ref_vel = ref_vel + pidObj.TotalError();
+                  calc_ref_vel = ref_vel + pidObj.TotalError();
                 }
                 // ...check whether a lane change is possible
                 if (LeftLaneChange)
@@ -211,10 +244,23 @@ int main()
               else if (o_car_id == i)
               {
                 pidActive = false;
-                ref_vel = 48;
+                // calc_ref_vel = resetVel();
               }
             }
           }
+
+          // How can the car react
+
+          if (calc_ref_vel > ref_vel + MAX_ACC)
+            calc_ref_vel = ref_vel + MAX_ACC;
+          if (calc_ref_vel < ref_vel - MAX_ACC)
+            calc_ref_vel = ref_vel - MAX_ACC;
+
+          if (calc_ref_vel > MAX_SPEED)
+            calc_ref_vel = MAX_SPEED;
+
+          // Finally
+          ref_vel = calc_ref_vel;
 
           // Code taken over from lesson and project Q&A
           // Create a list of widely spaced (x,y) waypoints, evenly spaced at 30m

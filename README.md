@@ -188,6 +188,33 @@ This is realized very effectively through algorithms in the 'Situation Analysis'
 
 After that, the variables LeftLaneChange and RightLaneChange are analyzed and the vehicle reacts accordingly.
 
+This screenshot shows an example lange change:
+![Lane change](img/lange_change.JPG)
+
+
 ### Reflection
 
-#### 1. There is a reflection on how to generate paths.
+#### Situation Analysis (./src/main.cpp)
+
+This part analyzes the environment around the car based on the own telemetry data and the received sensor fusion data.
+We can figure out how to handle 
+* Vehicles with slower velocity in front of the ego vehicle
+* Whether a lane change to the left/right is possible or whether the lane is blocked through another vehicle 
+
+PID controller is used to regulate the distance of the car in front of us. It is enable at a distance to target at 30m.
+As well as the car looks out for lane changes 30m in front of the other car.
+
+Output of this section will be used for the Vehicle reaction pattern.
+
+#### Vehicle reaction pattern (./src/main.cpp)
+
+The lane change is now executed under certain restrictions (distance for lane change must be upheld).
+
+Moreover, the restrictions for max. acceleration, jerk rate and speed limit is enforced through coding.
+
+#### Trajectory (./src/main.cpp)
+
+Based on the calculations done in the Vehicle reaction pattern, the trajectory can be calculated.
+
+For this purpose the spline library and the programmed code from the assignment is used.
+

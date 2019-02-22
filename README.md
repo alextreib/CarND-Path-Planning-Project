@@ -218,3 +218,8 @@ Based on the calculations done in the Vehicle reaction pattern, the trajectory c
 
 For this purpose the spline library and the programmed code from the assignment is used.
 
+The two last points of the previously calculated trajectory to initialize the spline calculation.
+Based on these, a coordinate transformation is done into frenet coordinate (car coordinate) system.
+
+The spline is used for smoothing the path of the trajectory and so the jerk acc is at a very low rate.
+To ensure that, the points are partially used for the calculation of the next trajectory.

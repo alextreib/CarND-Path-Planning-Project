@@ -206,10 +206,10 @@ int main()
 
           // Lane change
           // ...check whether a lane change is possible
-          if (LeftLaneChange && (dist_to_real_obj < dist_lane_change))
+          if (LeftLaneChange && (dist_to_real_obj < dist_lane_change) && (dist_to_real_obj > 0))
             lane--;
 
-          if (RightLaneChange && !LeftLaneChange && (dist_to_real_obj < dist_lane_change)) //otherwise lane will be same
+          if (RightLaneChange && !LeftLaneChange && (dist_to_real_obj < dist_lane_change) && (dist_to_real_obj > 0)) //otherwise lane will be same
             lane++;
 
           // How can the car react
